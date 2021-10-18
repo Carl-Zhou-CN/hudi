@@ -39,6 +39,7 @@ import org.apache.spark.sql.types.StructType;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -80,17 +81,18 @@ public class HoodieDatasetBulkInsertHelper {
     String keyGeneratorClass = properties.getString(DataSourceWriteOptions.KEYGENERATOR_CLASS_NAME().key());
     BuiltinKeyGenerator keyGenerator = (BuiltinKeyGenerator) ReflectionUtils.loadClass(keyGeneratorClass, properties);
     StructType structTypeForUDF = rows.schema();
-
-    sqlContext.udf().register(RECORD_KEY_UDF_FN, (UDF1<Row, String>) keyGenerator::getRecordKey, DataTypes.StringType);
-    sqlContext.udf().register(PARTITION_PATH_UDF_FN, (UDF1<Row, String>) keyGenerator::getPartitionPath, DataTypes.StringType);
+    String recordKeyUdfFnCurrent = RECORD_KEY_UDF_FN + UUID.randomUUID().toString();
+    String partitionPathUdfFnCurrent = PARTITION_PATH_UDF_FN + UUID.randomUUID().toString();
+    sqlContext.udf().register(recordKeyUdfFnCurrent, (UDF1<Row, String>) keyGenerator::getRecordKey, DataTypes.StringType);
+    sqlContext.udf().register(partitionPathUdfFnCurrent, (UDF1<Row, String>) keyGenerator::getPartitionPath, DataTypes.StringType);
 
     final Dataset<Row> rowDatasetWithRecordKeys = rows.withColumn(HoodieRecord.RECORD_KEY_METADATA_FIELD,
-        callUDF(RECORD_KEY_UDF_FN, org.apache.spark.sql.functions.struct(
+        callUDF(recordKeyUdfFnCurrent, org.apache.spark.sql.functions.struct(
             JavaConverters.collectionAsScalaIterableConverter(originalFields).asScala().toSeq())));
 
     final Dataset<Row> rowDatasetWithRecordKeysAndPartitionPath =
         rowDatasetWithRecordKeys.withColumn(HoodieRecord.PARTITION_PATH_METADATA_FIELD,
-            callUDF(PARTITION_PATH_UDF_FN,
+            callUDF(partitionPathUdfFnCurrent,
                 org.apache.spark.sql.functions.struct(
                     JavaConverters.collectionAsScalaIterableConverter(originalFields).asScala().toSeq())));
 
